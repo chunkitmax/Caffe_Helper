@@ -9,8 +9,10 @@ For those lazy guys who want to use Caffe in C++.
 </ul>
 
 ## Usage
+```
 $ helper prepare | train
 $ helper test <u>test_file</u>
+```
 
 ```
 Caffe_Helper
