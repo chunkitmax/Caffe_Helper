@@ -1,0 +1,6 @@
+Debug/*
+.git
+.project
+.cproject
+.settings/*
+nn/*
