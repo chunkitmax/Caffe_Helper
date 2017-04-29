@@ -1,6 +1,7 @@
 # Caffe_Helper
 
 For those lazy guys who want to use Caffe in C++.
+Multiple labels support. (Test needed)
 
 ## Requirement
 <ul>
@@ -47,5 +48,4 @@ $ helper help
             └── lock.mdb
 ```
 
-Binary file should be in Debug folder.
 Unfortunately, the whole structure cannot be changed by parameters. This is a future work.
