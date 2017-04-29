@@ -10,12 +10,15 @@
 #include <dirent.h>
 #include <regex>
 #include <string>
+#include <algorithm>
 
 #include <cuda_runtime.h>
+#include <stdlib.h>
 
 #include "caffe/caffe.hpp"
 #include "caffe/common.hpp"
 #include "caffe/solver.hpp"
+#include "caffe/sgd_solvers.hpp"
 #include "caffe/blob.hpp"
 #include "caffe/util/io.hpp"
 #include "caffe/util/db.hpp"
@@ -38,10 +41,10 @@ using namespace db;
 void getGPUs(vector<int>* gpus);
 void printHelp();
 
-const string MODEL_PATH_PREFIX = "../nn/";
-const string PROTOTXT_PATH_PREFIX = "../nn/prototxt/";
-const string TRAININGSET_PATH_PREFIX = "../nn/training_set/";
-const string TEST_DATA_PATH_PREFIX = "../nn/";
+const string MODEL_PATH_PREFIX = "nn/model/";
+const string PROTOTXT_PATH_PREFIX = "nn/prototxt/";
+const string TRAININGSET_PATH_PREFIX = "nn/training_set/";
+const string TEST_DATA_PATH_PREFIX = "nn/";
 
 //const string MODEL_PATH_PREFIX = "../nn/";
 //const string PROTOTXT_PATH_PREFIX = "../nn/prototxt/";
@@ -59,22 +62,28 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	if (!strcmp(argv[1], "test"))
+	if (!strcmp(argv[1], "help"))
+	{
+		printHelp();
+		return 0;
+	}
+	else if (!strcmp(argv[1], "test"))
 	{
 		Caffe::SetDevice(0);
 		Caffe::set_mode(Caffe::GPU);
 
 		float loss = 0.0;
-		Net<float> net(PROTOTXT_PATH_PREFIX + "net.prototxt", Phase::TEST);
+		Net<float> net(PROTOTXT_PATH_PREFIX + "test.prototxt", Phase::TEST);
 		DIR *dir;
 		struct dirent *ent;
-		if ((dir = opendir("./")) != NULL)
+		if ((dir = opendir(MODEL_PATH_PREFIX.c_str())) != NULL)
 		{
 			while ((ent = readdir(dir)) != NULL)
 			{
-				if (regex_match(ent->d_name, regex(".+\.caffemodel")))
+				if (regex_match(ent->d_name, regex("[^\\.]+\\.caffemodel")))
 				{
-					net.CopyTrainedLayersFrom(string("./") + ent->d_name);
+					net.CopyTrainedLayersFrom(MODEL_PATH_PREFIX + ent->d_name);
+					cout << "Finish loading caffe model: " << (MODEL_PATH_PREFIX + ent->d_name) << endl;
 					break;
 				}
 			}
@@ -96,8 +105,8 @@ int main(int argc, char **argv)
 		inputFile >> dataCount >> labelCount >> width >> height >> isGray;
 		inputFile.close();
 
-		Datum datum, lab_datum;
-		if (argv[1] == NULL)
+		Datum datum;
+		if (argv[2] == NULL)
 		{
 			printHelp();
 			return 0;
@@ -113,7 +122,7 @@ int main(int argc, char **argv)
 //		memoryLabDataLayer->AddDatumVector(vector<Datum>(1, lab_datum));
 //		cout << "OK" << endl;
 
-		cout << (TEST_DATA_PATH_PREFIX + argv[2]) << " " << width << " " << height << " " << isGray << endl;
+		cout << (TEST_DATA_PATH_PREFIX + argv[2]) << " " << width << " " << height << " " << (bool)isGray << endl;
 		bool status = ReadImageToDatum(TEST_DATA_PATH_PREFIX + argv[2], -1, width, height, &datum);
 		if (!status)
 		{
@@ -121,6 +130,7 @@ int main(int argc, char **argv)
 			return 0;
 		}
 		MemoryDataLayer<float> *memoryDataLayer = (MemoryDataLayer<float> *)net.layer_by_name("data").get();
+		cout << "OK" << endl;
 		vector<Datum> tmp(1);
 		tmp[0] = datum;
 		memoryDataLayer->AddDatumVector(tmp);
@@ -145,90 +155,94 @@ int main(int argc, char **argv)
 		scoped_ptr<Transaction> dat_txn(dat_db->NewTransaction());
 		scoped_ptr<DB> test_dat_db(db::GetDB("lmdb"));
 		test_dat_db->Open(TRAININGSET_PATH_PREFIX + "test_data_mdb", NEW);
-		scoped_ptr<Transaction> test_dat_txn(dat_db->NewTransaction());
+		scoped_ptr<Transaction> test_dat_txn(test_dat_db->NewTransaction());
 
 		scoped_ptr<DB> lab_db(db::GetDB("lmdb"));
 		lab_db->Open(TRAININGSET_PATH_PREFIX + "label_mdb", NEW);
 		scoped_ptr<Transaction> lab_txn(lab_db->NewTransaction());
 		scoped_ptr<DB> test_lab_db(db::GetDB("lmdb"));
 		test_lab_db->Open(TRAININGSET_PATH_PREFIX + "test_label_mdb", NEW);
-		scoped_ptr<Transaction> test_lab_txn(lab_db->NewTransaction());
+		scoped_ptr<Transaction> test_lab_txn(test_lab_db->NewTransaction());
 
 		Datum dat_datum, lab_datum;
 		int count = 0;
 		ifstream inputFile(TRAININGSET_PATH_PREFIX + "dataList.txt");
 		ifstream inputTestFile(TRAININGSET_PATH_PREFIX + "testDataList.txt");
-		string curFileName, curTestFileName;
+		string curFileName;
 		bool status;
 		int dataCount, labelCount, width, height, isGray;
 		int testDataCount, testLabelCount, testWidth, testHeight, testIsGray;
+		std::vector<float> tmpVector;
 		float label;
 		string key_str, out;
 
+		std::vector<std::pair<std::string, std::vector<float>> > lines;
+		std::vector<std::pair<std::string, std::vector<float>> > testLines;
+
 		inputFile >> dataCount >> labelCount >> width >> height >> isGray;
-		inputFile >> testDataCount >> testLabelCount >> testWidth >> testHeight >> testIsGray;
+		inputTestFile >> testDataCount >> testLabelCount >> testWidth >> testHeight >> testIsGray;
 
-		if (dataCount != testDataCount ||
-			labelCount != testLabelCount ||
-			width != testWidth ||
-			height != testHeight ||
-			isGray != testIsGray)
-		{
-			cout << "Error: Test data size and train data size are not match." << endl;
-			return 0;
-		}
-
-		lab_datum.set_channels(labelCount);
-		lab_datum.set_height(1);
-		lab_datum.set_width(1);
+//		if (dataCount != testDataCount ||
+//			labelCount != testLabelCount ||
+//			width != testWidth ||
+//			height != testHeight ||
+//			isGray != testIsGray)
+//		{
+//			cout << "Error: Test data size and train data size are not match." << endl;
+//			return 0;
+//		}
 
 		cout << "Total " << dataCount << " images" << endl
 			 << "with " << labelCount << " labels." << endl;
 
 		for (int i = 0; i < dataCount; i++)
 		{
+			tmpVector.clear();
 			inputFile >> curFileName;
-			inputTestFile >> curTestFileName;
+			for (int j = 0; j < labelCount; j++)
+			{
+				inputFile >> label;
+				tmpVector.push_back(label);
+			}
+			lines.push_back(std::make_pair(curFileName, tmpVector));
+		}
+		for (int i = 0; i < testDataCount; i++)
+		{
+			tmpVector.clear();
+			inputTestFile >> curFileName;
+			for (int j = 0; j < testLabelCount; j++)
+			{
+				inputTestFile >> label;
+				tmpVector.push_back(label);
+			}
+			testLines.push_back(std::make_pair(curFileName, tmpVector));
+		}
 
-			status = ReadImageToDatum(TRAININGSET_PATH_PREFIX + "data/" + curFileName, -1, width, height, (bool)isGray, &dat_datum);
+		std::random_shuffle(lines.begin(), lines.end());
+		std::random_shuffle(testLines.begin(), testLines.end());
+
+		count = 0;
+		lab_datum.set_channels(labelCount);
+		lab_datum.set_height(1);
+		lab_datum.set_width(1);
+		for (int lineId = 0; lineId < lines.size(); lineId++)
+		{
+			dat_datum.clear_data();
+			lab_datum.clear_float_data();
+			status = ReadImageToDatum(TRAININGSET_PATH_PREFIX + "data/" + lines[lineId].first, -1, width, height, !((bool)isGray), &dat_datum);
 			if (!status)
 			{
 				cout << "Error: One of data files cannot be loaded." << endl << endl;
 				return 0;
 			}
-			lab_datum.clear_data();
-			lab_datum.clear_float_data();
-			for (int j = 0; j < labelCount; j++)
-			{
-				inputFile >> label;
-				lab_datum.add_float_data(label);
-			}
+			for (int labelId = 0; labelId < lines[lineId].second.size(); labelId++)
+				lab_datum.add_float_data(lines[lineId].second[labelId]);
 
-			key_str = format_int(i, 8);
+			key_str = format_int(lineId, 8);
 			CHECK(dat_datum.SerializeToString(&out));
 			dat_txn->Put(key_str, out);
 			CHECK(lab_datum.SerializeToString(&out));
 			lab_txn->Put(key_str, out);
-
-			status = ReadImageToDatum(TRAININGSET_PATH_PREFIX + "data/" + curTestFileName, -1, width, height, (bool)isGray, &dat_datum);
-			if (!status)
-			{
-				cout << "Error: One of test data files cannot be loaded." << endl << endl;
-				return 0;
-			}
-			lab_datum.clear_data();
-			lab_datum.clear_float_data();
-			for (int j = 0; j < labelCount; j++)
-			{
-				inputTestFile >> label;
-				lab_datum.add_float_data(label);
-			}
-
-			key_str = format_int(i, 8);
-			CHECK(dat_datum.SerializeToString(&out));
-			test_dat_txn->Put(key_str, out);
-			CHECK(lab_datum.SerializeToString(&out));
-			test_lab_txn->Put(key_str, out);
 
 			if (!(++count % 1000))
 			{
@@ -236,21 +250,59 @@ int main(int argc, char **argv)
 				dat_txn.reset(dat_db->NewTransaction());
 				lab_txn->Commit();
 				lab_txn.reset(lab_db->NewTransaction());
-				test_dat_txn->Commit();
-				test_dat_txn.reset(test_dat_db->NewTransaction());
-				test_lab_txn->Commit();
-				test_lab_txn.reset(test_lab_db->NewTransaction());
-				cout << "Processed " << count << " files." << endl;
+				cout << "Processed " << count << " data files." << endl;
 			}
 		}
 		if (count % 1000 != 0)
 		{
 			dat_txn->Commit();
 			lab_txn->Commit();
+			cout << "Total " << count << " data files." << endl;
+		}
+
+		count = 0;
+		lab_datum.set_channels(labelCount);
+		lab_datum.set_height(1);
+		lab_datum.set_width(1);
+		for (int lineId = 0; lineId < testLines.size(); lineId++)
+		{
+			dat_datum.clear_data();
+			lab_datum.clear_float_data();
+			status = ReadImageToDatum(TRAININGSET_PATH_PREFIX + "test_data/" + testLines[lineId].first, -1, width, height, !((bool)testIsGray), &dat_datum);
+			if (!status)
+			{
+				cout << "Error: One of data files cannot be loaded." << endl << endl;
+				return 0;
+			}
+			for (int labelId = 0; labelId < testLines[lineId].second.size(); labelId++)
+				lab_datum.add_float_data(testLines[lineId].second[labelId]);
+
+			key_str = format_int(lineId, 8);
+			CHECK(dat_datum.SerializeToString(&out));
+			test_dat_txn->Put(key_str, out);
+			CHECK(lab_datum.SerializeToString(&out));
+			test_lab_txn->Put(key_str, out);
+
+			if (!(++count % 1000))
+			{
+				test_dat_txn->Commit();
+				test_dat_txn.reset(test_dat_db->NewTransaction());
+				test_lab_txn->Commit();
+				test_lab_txn.reset(test_lab_db->NewTransaction());
+				cout << "Processed " << count << " test data files." << endl;
+			}
+		}
+		if (count % 1000 != 0)
+		{
 			test_dat_txn->Commit();
 			test_lab_txn->Commit();
-			cout << "Processed " << count << " files." << endl;
+			cout << "Total " << count << " test data files." << endl;
 		}
+
+		dat_db->Close();
+		lab_db->Close();
+		test_dat_db->Close();
+		test_lab_db->Close();
 		inputFile.close();
 		inputTestFile.close();
 	}
@@ -280,7 +332,7 @@ int main(int argc, char **argv)
 		ReadSolverParamsFromTextFileOrDie(PROTOTXT_PATH_PREFIX + "solver.prototxt", &solver_param);
 
 		caffe::SignalHandler signal_handler(SolverAction::STOP, SolverAction::SNAPSHOT);
-		caffe::shared_ptr<Solver<float>> solver(SolverRegistry<float>::CreateSolver(solver_param));
+		caffe::Solver<float>* solver = new caffe::SGDSolver<float>(solver_param);
 		solver->SetActionFunction(signal_handler.GetActionFunction());
 
 		DIR *dir;
@@ -336,19 +388,54 @@ void getGPUs(vector<int>* gpus)
 
 void printHelp()
 {
-
-	cout << endl << endl << "Usage: helper [prepare/train/test] {test_data_file_name}" << endl
+	std::ostringstream oStr;
+	oStr << endl << endl << "Usage: helper [prepare/train/test] {test_data_file_name}" << endl
 		 << "prepare:" << endl
-		 << "\tMake sure that there are dataList.txt and testDataList.txt file, in nn/training_set folder which contains a list of data file name and corresponding label in the following format" << endl
-		 << "\t\t[Data count]\\t[Label count]\\t[Width]\\t[Height]\\t[gray{1/0}]\\n\t// First line" << endl
-		 << "\t\t[Data file name]\\t[label]\\n" << endl
+		 << "\tMake sure that there are dataList.txt and testDataList.txt file, in nn/training_set folder" << endl
+		 << "\twhich contains a list of data file name and corresponding label in the following format:" << endl
+		 << endl
+		 << "\tLine 1: [Data count]\\t[Label count]\\t[Width]\\t[Height]\\t[gray{1/0}]\\n\t" << endl
+		 << "\tLine ?: [Data file name]\\t[label]\\n" << endl
 		 << "\t**All data files must be in nn/training_set/data folder" << endl
-		 << "\t**All label files must be in nn/training_set/label folder." << endl
+//		 << "\t**All label files must be in nn/training_set/label folder." << endl
 		 << endl
 		 << "train:" << endl
 		 << "\tMake sure that sovler.prototxt and net.prototxt are in nn/prototxt folder" << endl
 		 << endl
 		 << "test:" << endl
 		 << "\tPlease enter target file name which is supposed to be in nn folder" << endl
-		 << "\tMake sure that nn/model folder contains .caffemodel file" << endl << endl << endl;
+		 << "\tMake sure that test.prototxt is placed in nn/prototxt folder" << endl
+		 << "\tMake sure that nn/model folder contains .caffemodel file" << endl << endl
+		 << "." << endl
+		 << "└── nn" << endl
+		 << "    ├── model" << endl
+		 << "    │   ├── ?.caffemodel" << endl
+		 << "    │   └── ?.solverstate" << endl
+		 << "    ├── prototxt" << endl
+		 << "    │   ├── mean.binaryproto" << endl
+		 << "    │   ├── net.prototxt" << endl
+		 << "    │   ├── solver.prototxt" << endl
+		 << "    │   └── test.prototxt" << endl
+		 << "    └── training_set" << endl
+		 << "        ├── data" << endl
+		 << "        │   └── ?.jpg ..." << endl
+		 << "        ├── dataList.txt" << endl
+		 << "        ├── data_mdb" << endl
+		 << "        │   ├── data.mdb" << endl
+		 << "        │   └── lock.mdb" << endl
+		 << "        ├── label_mdb" << endl
+		 << "        │   ├── data.mdb" << endl
+		 << "        │   └── lock.mdb" << endl
+		 << "        ├── test_data" << endl
+		 << "        │   └── ?.jpg ..." << endl
+		 << "        ├── dataList.txt" << endl
+		 << "        ├── test_data_mdb" << endl
+		 << "        │   ├── data.mdb" << endl
+		 << "        │   └── lock.mdb" << endl
+		 << "        └── test_label_mdb" << endl
+		 << "            ├── data.mdb" << endl
+		 << "            └── lock.mdb" << endl
+		 << endl
+		 << endl;
+	std::system(("echo \"" + oStr.str() + "\" | more").c_str());
 }
