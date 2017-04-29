@@ -130,14 +130,10 @@ int main(int argc, char **argv)
 			return 0;
 		}
 		MemoryDataLayer<float> *memoryDataLayer = (MemoryDataLayer<float> *)net.layer_by_name("data").get();
-		cout << "OK" << endl;
 		vector<Datum> tmp(1);
 		tmp[0] = datum;
 		memoryDataLayer->AddDatumVector(tmp);
-		cout << "OK" << endl;
 		const vector<Blob<float> *> &result = net.Forward(&loss);
-
-		cout << "OK" << endl;
 
 		const boost::shared_ptr<Blob<float>> &probLayer = net.blob_by_name("prob");
 
