@@ -12,23 +12,39 @@ For those lazy guys who want to use Caffe in C++.
 ```
 $ helper prepare | train
 $ helper test <u>test_file</u>
+$ helper help
 ```
 
 ```
-Caffe_Helper
-├── Debug
-│   └── src
-├── nn
-│   ├── model
-│   ├── prototxt
-│   └── training_set
-│       ├── data
-│       ├── data_mdb
-│       ├── data_mdb(copy)
-│       ├── label_mdb
-│       ├── label_mdb(copy)
-│       └── test_data
-└── src
+.
+└── nn
+    ├── model
+    │   ├── ?.caffemodel
+    │   └── ?.solverstate
+    ├── prototxt
+    │   ├── mean.binaryproto
+    │   ├── net.prototxt
+    │   ├── solver.prototxt
+    │   └── test.prototxt
+    └── training_set
+        ├── data
+        │   └── ?.jpg ...
+        ├── dataList.txt
+        ├── data_mdb
+        │   ├── data.mdb
+        │   └── lock.mdb
+        ├── label_mdb
+        │   ├── data.mdb
+        │   └── lock.mdb
+        ├── test_data
+        │   └── ?.jpg ...
+        ├── dataList.txt
+        ├── test_data_mdb
+        │   ├── data.mdb
+        │   └── lock.mdb
+        └── test_label_mdb
+            ├── data.mdb
+            └── lock.mdb
 ```
 
 Binary file should be in Debug folder.
