@@ -1,4 +1,4 @@
-# Caffe_Helper
+# caffeine
 
 For those lazy guys who want to use Caffe in C++.
 Multiple labels support. (Test needed)
@@ -11,9 +11,9 @@ Multiple labels support. (Test needed)
 
 ## Usage
 ```
-$ helper prepare | train
-$ helper test <u>test_file</u>
-$ helper help
+$ caffeine prepare | train
+$ caffeine test <u>test_file</u>
+$ caffeine help
 ```
 
 ```

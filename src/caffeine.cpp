@@ -1,5 +1,5 @@
 /*
- * helper.cpp
+ * caffeine.cpp
  *
  *  Created on: Apr 1, 2017
  *      Author: petel__
@@ -339,7 +339,7 @@ int main(int argc, char **argv)
 			{
 				if (regex_match(ent->d_name, regex(".+\.solverstate")))
 				{
-					solver->Restore((PROTOTXT_PATH_PREFIX + ent->d_name).c_str());
+					solver->Restore((MODEL_PATH_PREFIX + ent->d_name).c_str());
 					break;
 				}
 			}
@@ -385,7 +385,7 @@ void getGPUs(vector<int>* gpus)
 void printHelp()
 {
 	std::ostringstream oStr;
-	oStr << endl << endl << "Usage: helper [prepare/train/test] {test_data_file_name}" << endl
+	oStr << endl << endl << "Usage: caffeine [prepare/train/test] {test_data_file_name}" << endl
 		 << "prepare:" << endl
 		 << "\tMake sure that there are dataList.txt and testDataList.txt file, in nn/training_set folder" << endl
 		 << "\twhich contains a list of data file name and corresponding label in the following format:" << endl
@@ -396,7 +396,7 @@ void printHelp()
 //		 << "\t**All label files must be in nn/training_set/label folder." << endl
 		 << endl
 		 << "train:" << endl
-		 << "\tMake sure that sovler.prototxt and net.prototxt are in nn/prototxt folder" << endl
+		 << "\tMake sure that sovler.prototxt and train.prototxt are in nn/prototxt folder" << endl
 		 << endl
 		 << "test:" << endl
 		 << "\tPlease enter target file name which is supposed to be in nn folder" << endl
@@ -409,7 +409,7 @@ void printHelp()
 		 << "    │   └── ?.solverstate" << endl
 		 << "    ├── prototxt" << endl
 		 << "    │   ├── mean.binaryproto" << endl
-		 << "    │   ├── net.prototxt" << endl
+		 << "    │   ├── train.prototxt" << endl
 		 << "    │   ├── solver.prototxt" << endl
 		 << "    │   └── test.prototxt" << endl
 		 << "    └── training_set" << endl
