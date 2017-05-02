@@ -1,6 +1,7 @@
 # caffeine
 
 For those lazy guys who want to use Caffe in C++.
+
 Multiple labels support. (Test needed)
 
 ## Requirement
@@ -11,8 +12,8 @@ Multiple labels support. (Test needed)
 
 ## Usage
 ```
-$ caffeine prepare | train
-$ caffeine test <u>test_file</u>
+$ caffeine [data/image] prepare | train
+$ caffeine [data/image] test {test_file_name}
 $ caffeine help
 ```
 
