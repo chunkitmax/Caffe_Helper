@@ -1,6 +1,7 @@
-Debug/*
 .git
 .project
 .cproject
 .settings/*
 nn/*
+Debug/*
+!Debug/caffeine
