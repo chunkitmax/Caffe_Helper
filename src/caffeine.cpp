@@ -66,7 +66,17 @@ int main(int argc, char **argv)
 
 	if (!strcmp(argv[1], "help") || !strcmp(argv[2], "help"))
 	{
-		printHelp();
+		if (argc > 2)
+		{
+			if (!strcmp(argv[1], "image"))
+				printImageHelp();
+			else if (!strcmp(argv[1], "data"))
+				printDataHelp();
+			else
+				printHelp();
+		}
+		else
+			printHelp();
 		return 0;
 	}
 	else if (!strcmp(argv[1], "image"))
@@ -272,7 +282,7 @@ int main(int argc, char **argv)
 				status = ReadImageToDatum(TRAININGSET_PATH_PREFIX + "test_data/" + testLines[lineId].first, -1, width, height, !((bool)testIsGray), &dat_datum);
 				if (!status)
 				{
-					cout << "Error: One of data files cannot be loaded." << endl << endl;
+					cout << "Error: One of data files cannot be loaded. (File name: " << testLines[lineId].first << ")" << endl << endl;
 					return 0;
 				}
 				for (uint32_t labelId = 0; labelId < testLines[lineId].second.size(); labelId++)
